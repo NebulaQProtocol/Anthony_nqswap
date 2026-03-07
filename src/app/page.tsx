@@ -1,66 +1,42 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
 
-export default function Home() {
+import { useMemo, useEffect } from 'react';
+import { Header } from '@/components/layout/Header';
+import { CandlestickChart } from '@/components/chart/CandlestickChart';
+import { PoolTable } from '@/components/pool-table/PoolTable';
+import { usePoolWorker } from '@/hooks/usePoolWorker';
+import { usePoolStore } from '@/store/pool-store';
+import { SEED_POOL_IDS } from '@/lib/seed-pool-ids';
+
+export default function DashboardPage() {
+  const initPools = usePoolStore((s) => s.initPools);
+
+  // Initialize pools on mount
+  useEffect(() => {
+    // In a real app, this would come from the tRPC query.
+    // For the MVP, we initialize with seed data so the worker can start immediately.
+    initPools(SEED_POOL_IDS.map((id) => ({
+      id,
+      name: id.replace('pool-', '').replace(/-/g, '/').toUpperCase(),
+      tokenA: id.replace('pool-', '').split('-')[0].toUpperCase(),
+      tokenB: id.replace('pool-', '').split('-')[1]?.toUpperCase() || 'USDC',
+      tvl: 0,
+      volume24h: 0,
+    })));
+  }, [initPools]);
+
+  const poolIds = useMemo(() => SEED_POOL_IDS, []);
+
+  // Start the Web Worker data pipeline
+  usePoolWorker(poolIds);
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="dashboard">
+      <Header />
+      <div className="dashboard-content">
+        <CandlestickChart />
+        <PoolTable />
+      </div>
     </div>
   );
 }
