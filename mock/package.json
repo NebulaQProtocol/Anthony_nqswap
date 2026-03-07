@@ -1,0 +1,16 @@
+{
+  "name": "nqswap-mock-servers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx index.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "zod": "^3.24.0",
+    "tsx": "^4.19.0"
+  }
+}

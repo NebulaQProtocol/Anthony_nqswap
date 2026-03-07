@@ -1,0 +1,98 @@
+import { Pool } from '../../src/lib/types';
+
+/**
+ * 10 hardcoded pools with realistic DEX token pairs and initial prices.
+ * Used by both mock WS and RPC servers for consistent seed data.
+ */
+export const SEED_POOLS: (Pool & { initialPrice: number })[] = [
+    {
+        id: 'pool-eth-usdc',
+        name: 'ETH/USDC',
+        tokenA: 'ETH',
+        tokenB: 'USDC',
+        tvl: 125_000_000,
+        volume24h: 45_000_000,
+        initialPrice: 1850.50,
+    },
+    {
+        id: 'pool-btc-usdc',
+        name: 'BTC/USDC',
+        tokenA: 'BTC',
+        tokenB: 'USDC',
+        tvl: 280_000_000,
+        volume24h: 92_000_000,
+        initialPrice: 42_150.00,
+    },
+    {
+        id: 'pool-sol-usdc',
+        name: 'SOL/USDC',
+        tokenA: 'SOL',
+        tokenB: 'USDC',
+        tvl: 35_000_000,
+        volume24h: 18_000_000,
+        initialPrice: 98.75,
+    },
+    {
+        id: 'pool-arb-eth',
+        name: 'ARB/ETH',
+        tokenA: 'ARB',
+        tokenB: 'ETH',
+        tvl: 22_000_000,
+        volume24h: 8_500_000,
+        initialPrice: 1.15,
+    },
+    {
+        id: 'pool-op-eth',
+        name: 'OP/ETH',
+        tokenA: 'OP',
+        tokenB: 'ETH',
+        tvl: 18_500_000,
+        volume24h: 6_200_000,
+        initialPrice: 2.35,
+    },
+    {
+        id: 'pool-matic-usdc',
+        name: 'MATIC/USDC',
+        tokenA: 'MATIC',
+        tokenB: 'USDC',
+        tvl: 42_000_000,
+        volume24h: 15_000_000,
+        initialPrice: 0.85,
+    },
+    {
+        id: 'pool-link-eth',
+        name: 'LINK/ETH',
+        tokenA: 'LINK',
+        tokenB: 'ETH',
+        tvl: 28_000_000,
+        volume24h: 11_000_000,
+        initialPrice: 14.20,
+    },
+    {
+        id: 'pool-uni-usdc',
+        name: 'UNI/USDC',
+        tokenA: 'UNI',
+        tokenB: 'USDC',
+        tvl: 31_000_000,
+        volume24h: 9_800_000,
+        initialPrice: 6.45,
+    },
+    {
+        id: 'pool-avax-usdc',
+        name: 'AVAX/USDC',
+        tokenA: 'AVAX',
+        tokenB: 'USDC',
+        tvl: 24_000_000,
+        volume24h: 7_200_000,
+        initialPrice: 35.60,
+    },
+    {
+        id: 'pool-doge-usdc',
+        name: 'DOGE/USDC',
+        tokenA: 'DOGE',
+        tokenB: 'USDC',
+        tvl: 15_000_000,
+        volume24h: 12_500_000,
+        initialPrice: 0.082,
+    },
+];
