@@ -24,20 +24,34 @@ export class CandlestickAggregator {
     onPriceUpdate(update: PriceUpdate): void {
         const existing = this.buckets.get(update.poolId);
 
+        const time = Math.floor(update.timestamp / 1000); // Lightweight Charts uses seconds
+
         if (!existing) {
             this.buckets.set(update.poolId, {
                 open: update.price,
                 high: update.price,
                 low: update.price,
                 close: update.price,
-                time: Math.floor(update.timestamp / 1000), // Lightweight Charts uses seconds
+                time,
                 dirty: true,
             });
         } else {
-            existing.high = Math.max(existing.high, update.price);
-            existing.low = Math.min(existing.low, update.price);
-            existing.close = update.price;
-            existing.dirty = true;
+            if (time > existing.time) {
+                // Time has advanced (new second). Start a new candle bucket.
+                // To prevent visual gaps, we use the previous close as the new open.
+                existing.open = existing.close;
+                existing.high = Math.max(existing.close, update.price);
+                existing.low = Math.min(existing.close, update.price);
+                existing.close = update.price;
+                existing.time = time;
+                existing.dirty = true;
+            } else {
+                // Same candle period
+                existing.high = Math.max(existing.high, update.price);
+                existing.low = Math.min(existing.low, update.price);
+                existing.close = update.price;
+                existing.dirty = true;
+            }
         }
     }
 
@@ -59,10 +73,6 @@ export class CandlestickAggregator {
                 close: bucket.close,
             });
 
-            // Reset bucket for next candle period
-            bucket.open = bucket.close;
-            bucket.high = bucket.close;
-            bucket.low = bucket.close;
             bucket.dirty = false;
         }
 

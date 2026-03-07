@@ -55,9 +55,16 @@ export const usePoolStore = create<PoolStoreState>((set, get) => ({
                 if (!existing) continue;
 
                 // Ring buffer: keep last MAX_CANDLES_PER_POOL candles
-                const candles = [...existing.candles, update.candle];
-                if (candles.length > MAX_CANDLES_PER_POOL) {
-                    candles.splice(0, candles.length - MAX_CANDLES_PER_POOL);
+                const candles = [...existing.candles];
+                const lastCandle = candles[candles.length - 1];
+
+                if (lastCandle && lastCandle.time === update.candle.time) {
+                    candles[candles.length - 1] = update.candle;
+                } else {
+                    candles.push(update.candle);
+                    if (candles.length > MAX_CANDLES_PER_POOL) {
+                        candles.shift();
+                    }
                 }
 
                 newPools.set(update.poolId, {

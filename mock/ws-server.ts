@@ -16,10 +16,10 @@ SEED_POOLS.forEach((pool) => {
 });
 
 /**
- * Generate a random price walk: ±0.1% to ±1% per tick.
+ * Generate a random price walk: ±0.05% per tick.
  */
 function walkPrice(current: number): number {
-    const changePercent = (Math.random() - 0.5) * 0.02; // ±1%
+    const changePercent = (Math.random() - 0.5) * 0.001; // ±0.05%
     const newPrice = current * (1 + changePercent);
     return Math.max(newPrice, 0.000001); // Prevent zero/negative
 }

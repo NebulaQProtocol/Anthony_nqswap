@@ -57,19 +57,35 @@ describe('CandlestickAggregator', () => {
         expect(second.size).toBe(0);
     });
 
-    it('resets open price to previous close after flush', () => {
+    it('maintains candle data when flushing within the same time period', () => {
         aggregator.onPriceUpdate(makePriceUpdate({ price: 100 }));
         aggregator.onPriceUpdate(makePriceUpdate({ price: 150 }));
         aggregator.flush();
 
-        // Next update after flush
+        // Next update after flush (same timestamp period)
         aggregator.onPriceUpdate(makePriceUpdate({ price: 160 }));
         const candle = aggregator.flush().get('pool-1')!;
 
-        // Open should be previous close (150), not the new price
-        expect(candle.open).toBe(150);
+        // Open should be the very first price in this period (100)
+        expect(candle.open).toBe(100);
         expect(candle.high).toBe(160);
         expect(candle.close).toBe(160);
+    });
+
+    it('starts a new candle bucket when the time advances', () => {
+        aggregator.onPriceUpdate(makePriceUpdate({ price: 100, timestamp: 1700000000000 }));
+        aggregator.flush();
+
+        // Advance by 1 second
+        aggregator.onPriceUpdate(makePriceUpdate({ price: 200, timestamp: 1700000001000 }));
+        const candle = aggregator.flush().get('pool-1')!;
+
+        // New candle: open = prev close (100), close = new price (200), high = 200, low = 100
+        expect(candle.open).toBe(100);
+        expect(candle.high).toBe(200);
+        expect(candle.low).toBe(100);
+        expect(candle.close).toBe(200);
+        expect(candle.time).toBe(1700000001);
     });
 
     it('handles multiple pools independently', () => {
