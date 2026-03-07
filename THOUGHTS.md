@@ -1,45 +1,34 @@
-# nQ-Swap Real-Time DEX Monitoring Dashboard: Architectural Thoughts & Trade-offs
+# nQ-Swap Dashboard: Architectural Notes & Trade-offs
 
-This document outlines the key architectural decisions, performance optimizations, and trade-offs made while building the nQ-Swap DEX monitoring dashboard.
+Here are some notes on how I approached the real-time DEX dashboard, specifically around state management and performance. Parsing 1,000 updates a second in the browser is usually a recipe for a frozen tab, so I had to make some specific architectural decisions to keep things smooth.
 
-## 1. The Block Confirmation Guard (Dual-State Price Model)
-The core challenge of this project was reconciling a fast, unreliable WebSocket feed (pending prices) with a slow, reliable RPC feed (confirmed prices), while gracefully handling blockchain reorganizations.
+## The Dual-State Price Model (WS vs RPC)
+The biggest challenge was dealing with the race conditions between the fast, noisy mempool WebSocket and the slow, reliable RPC node. 
 
-**Solution: The `ConfirmationGuard`**
-- **Idempotency**: WebSocket updates are deduplicated by `txHash` to handle duplicate events safely.
-- **Higher-Block-Wins**: The RPC acts as the absolute source of truth. When the RPC confirms a block, the guard immediately promotes that block's price and discards any pending prices <= that block number.
-- **Reorg Handling**: If the WebSocket emits a price for block `N`, but the RPC later confirms a different price for block `N` (or a later block without that transaction), the pending price is safely overwritten or discarded. The app inherently trusts the RPC.
-- **Stale Expiry (TTL)**: Pending prices older than 60 seconds (configurable via `PENDING_TTL_MS`) are aggressively garbage collected to prevent memory leaks from dropped WebSocket connections or abandoned transactions.
+I ended up building a `ConfirmationGuard` class to manage this. 
+- It treats the RPC as absolute law. If the RPC confirms a block, we instantly promote that price and dump any pending prices from the WS that are from the same or older blocks.
+- To handle duplicate WS events (which happens constantly with real mempools), the guard dedupes everything against the `txHash`.
+- To handle reorgs: if the WS emits a price, but the RPC later confirms a different price for that same block, we just overwrite the pending price. The UI inherently trusts the RPC over the WS.
+- I also added a 60-second TTL to pending prices. If the RPC never confirms a transaction (maybe it got dropped from the mempool or the WS disconnected), we just expire it. This prevents the pending queue from leaking memory over time.
 
-## 2. Web Worker Data Pipeline (1000 updates/sec)
-React's rendering cycle fundamentally cannot handle 1000 state updates per second without freezing the main thread. 
+## State Management (Why Zustand?)
+Trying to push 1000 updates a second through React Context or Redux would trigger way too many re-renders. 
 
-**Solution: `CandlestickAggregator` in a Dedicated Thread**
-- All WebSocket connections, Zod parsing, and RPC polling happen inside a background Web Worker (`pool-worker.ts`).
-- **OHLC Batching**: The aggregator batches thousands of raw price points into Open-High-Low-Close (OHLC) candles. The worker flushes these candles to the main thread at a fixed 60fps interval (`BATCH_INTERVAL_MS = 16`).
-- **Result**: The main thread only receives 60 messages per second, regardless of whether the WebSocket sends 100 or 10,000 updates per second. UI performance remains perfectly silky smooth.
+I went with Zustand because it lets us use atomic selectors. For example, the `PoolRow` component only subscribes to data for its specific pool ID. When BTC updates, the ETH row doesn't re-render. 
 
-## 3. Zustand Ring Buffers & Atomic Selectors
-Even with 60fps batching, storing infinite time-series data would eventually crash the browser tab (OOM).
+Even with atomic selectors, storing infinite tick data is going to cause an OOM crash eventually. So the Zustand store uses a strict ring buffer. We only keep the last 500 candles per pool in state. As new ones come in, the oldest ones get dropped.
 
-**Solution:**
-- **Ring Buffer**: The Zustand store limits chart history to the last 500 candles per pool (`MAX_CANDLES_PER_POOL`). Older candles are dropped sequentially.
-- **Atomic Selectors**: React components use fine-grained selectors (e.g., `usePoolData(poolId)`) rather than subscribing to the entire store. `PoolRow` components are wrapped in `React.memo` and only re-render when their specific pool data changes. The `ConnectionStatus` badge uses an entirely separate `connection-store` to prevent pool price updates from triggering header re-renders.
+## The Web Worker Data Pipeline
+React just can't handle 1000/sec on the main thread, no matter how optimized the state is. So I pushed all the heavy lifting to a background Web Worker (`pool-worker.ts`).
 
-## 4. Imperative Chart Updates (Lightweight Charts)
-Declarative React wrappers for charts (like Recharts) often struggle with high-frequency updates because they require a full DOM diffing cycle for every data point.
+The worker handles the raw WebSocket connection, parses the JSON using Zod (to ensure type safety at the boundary so bad data doesn't poison our state), and feeds it into a custom `CandlestickAggregator`. 
 
-**Solution:**
-- We chose TradingView's `lightweight-charts` mapped to a plain `HTMLDivElement` `ref`.
-- **Bypassing React**: The `CandlestickChart` component receives new data via a `useEffect` and calls `series.setData()` imperatively. This sidesteps React's Virtual DOM entirely, interacting directly with the Canvas API for maximum performance.
+Instead of sending every single tick to the main thread, the aggregator batches raw ticks into OHLC (Open, High, Low, Close) candles, and then flushes those to the main thread at a smooth 60fps (~16ms intervals). As a result, the main React thread only ever sees a maximum of 60 messages a second, keeping the UI completely lag-free.
 
-## 5. Type Safety & RPC
-- **tRPC**: Chose over REST/GraphQL for effortless end-to-end type safety between the mock server, the Next.js API route, and the client.
-- **Zod**: Used strictly at the system boundaries. The Web Worker parses raw WebSocket JSON against `PriceUpdateSchema`. The RPC client parses responses against `RPCResponseSchema`. This ensures malformed data from upstream providers never poisons our internal state.
+## Charting (Bypassing React)
+Since we have to draw so much data rapidly, declarative chart libraries like Recharts were too slow (they require a full DOM diffing cycle for every tick). 
 
-## 6. Resilience & Adaptive Polling
-- **Exponential Backoff**: Both the WebSocket client and Web Worker implement reconnect logic with jitter to prevent thundering herd problems on upstream services.
-- **Adaptive RPC Polling**: The worker polls the RPC aggressively (`1s`) only when there are pending prices awaiting confirmation. When idle, it slows down to `10s` to save RPC compute resources.
+I used TradingView's `lightweight-charts`. The `CandlestickChart` component just renders an empty `div` and we use a `useEffect` to imperatively push updates directly to the canvas using `series.setData()`. This completely bypasses React's virtual DOM and gets us maximum render performance.
 
-## Conclusion & Future Scaling
-This architecture safely scales to handle thousands of updates per second on the client. If we were to transition this to a production backend, the heavy lifting (Zod validation, OHLC aggregation, and race-condition resolution) could be moved to a robust Go or Rust microservice, replacing the browser Web Worker with a single, pre-aggregated server-side WebSocket feed directly to the client.
+## Future Thoughts
+This setup scales surprisingly well for a pure client-side MVP approach. But if we were to push this to a real production environment, we should probably move the `CandlestickAggregator` and the WS/RPC merging logic out of the browser and into a Go or Rust backend service. Then the frontend would just subscribe to a single, clean, pre-computed WebSocket feed from our own server.
